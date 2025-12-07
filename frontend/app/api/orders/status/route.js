@@ -1,7 +1,7 @@
 // app/api/orders/[id]/status/route.js
 import { NextResponse } from 'next/server';
-import { connectDB } from '../../../../../lib/db';
-import Order from '../../../../../models/Order';
+import { connectDB } from '../../../../lib/db';
+import Order from '../../../../models/Orders';
 
 export async function PATCH(request, { params }) {
   try {
