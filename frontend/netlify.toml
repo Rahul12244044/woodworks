@@ -1,0 +1,16 @@
+cd ~/Music/woodworks/frontend
+
+cat > netlify.toml << 'EOF'
+[build]
+  command = "npm run build"
+  publish = ".next"
+  functions = ".netlify/functions"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+EOF
