@@ -1,6 +1,7 @@
 // contexts/CartContext.js
 'use client';
 import { createContext, useContext, useReducer, useEffect } from 'react';
+import { useAuth } from './AuthContext'; // Import your existing AuthContext
 
 const CartContext = createContext();
 
@@ -64,10 +65,18 @@ const initialState = {
 
 export const CartProvider = ({ children }) => {
   const [state, dispatch] = useReducer(cartReducer, initialState);
+  const { user, loading } = useAuth(); // Use your auth context
+
+  // Generate user-specific localStorage key
+  const getCartKey = () => {
+    return user ? `woodshop-cart-${user._id}` : 'woodshop-guest-cart';
+  };
 
   // Load cart from localStorage on mount
   useEffect(() => {
-    const savedCart = localStorage.getItem('woodshop-cart');
+    const cartKey = getCartKey();
+    const savedCart = localStorage.getItem(cartKey);
+    
     if (savedCart) {
       try {
         dispatch({ type: 'LOAD_CART', payload: JSON.parse(savedCart) });
@@ -75,15 +84,26 @@ export const CartProvider = ({ children }) => {
         console.error('Error loading cart from localStorage:', error);
       }
     }
-  }, []);
+  }, [user]); // Re-run when user changes
 
   // Save cart to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('woodshop-cart', JSON.stringify(state.items));
-  }, [state.items]);
+    const cartKey = getCartKey();
+    localStorage.setItem(cartKey, JSON.stringify(state.items));
+  }, [state.items, user]);
 
   const addToCart = (product, quantity = 1) => {
+    if (!user && !loading) {
+      // For guests, show login prompt
+      return { 
+        success: false, 
+        message: 'Please login to add items to cart',
+        requiresLogin: true 
+      };
+    }
+
     dispatch({ type: 'ADD_TO_CART', payload: { ...product, quantity } });
+    return { success: true, message: `${product.name} added to cart` };
   };
 
   const removeFromCart = (productId) => {
@@ -106,6 +126,48 @@ export const CartProvider = ({ children }) => {
     return state.items.reduce((total, item) => total + item.quantity, 0);
   };
 
+  // Transfer cart from guest to user when they login
+  const transferGuestCart = () => {
+    if (!user || loading) return;
+    
+    const guestCart = localStorage.getItem('woodshop-guest-cart');
+    if (guestCart) {
+      try {
+        const guestItems = JSON.parse(guestCart);
+        const userCart = localStorage.getItem(`woodshop-cart-${user._id}`);
+        const userItems = userCart ? JSON.parse(userCart) : [];
+        
+        // Merge carts
+        const mergedItems = [...userItems];
+        
+        guestItems.forEach(guestItem => {
+          const existingItem = mergedItems.find(item => item._id === guestItem._id);
+          if (existingItem) {
+            existingItem.quantity += guestItem.quantity;
+          } else {
+            mergedItems.push(guestItem);
+          }
+        });
+        
+        // Save merged cart
+        localStorage.setItem(`woodshop-cart-${user._id}`, JSON.stringify(mergedItems));
+        localStorage.removeItem('woodshop-guest-cart');
+        
+        // Update state
+        dispatch({ type: 'LOAD_CART', payload: mergedItems });
+      } catch (error) {
+        console.error('Error transferring guest cart:', error);
+      }
+    }
+  };
+
+  // Transfer cart when user logs in
+  useEffect(() => {
+    if (user && !loading) {
+      transferGuestCart();
+    }
+  }, [user, loading]);
+
   const value = {
     items: state.items,
     addToCart,
@@ -113,7 +175,9 @@ export const CartProvider = ({ children }) => {
     updateQuantity,
     clearCart,
     getCartTotal,
-    getCartItemsCount
+    getCartItemsCount,
+    isLoggedIn: !!user,
+    isLoading: loading
   };
 
   return (

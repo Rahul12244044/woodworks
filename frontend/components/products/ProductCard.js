@@ -2,10 +2,12 @@
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useCart } from '../../contexts/CartContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function ProductCard({ product }) {
   const router = useRouter();
   const { addToCart } = useCart();
+  const { user, loading } = useAuth();
 
   const handleCardClick = () => {
     console.log('🔄 Navigating to product:', `/products/${product._id}`);
@@ -13,10 +15,25 @@ export default function ProductCard({ product }) {
   };
 
   const handleAddToCart = (e) => {
-    e.stopPropagation(); // Important: prevent card navigation
-    console.log('🛒 Add to cart clicked for:', product.name);
-    addToCart(product, 1);
-    alert(`${product.name} added to cart!`);
+    e.stopPropagation();
+    
+    if (loading) return;
+    
+    const result = addToCart(product, 1);
+    
+    if (result.requiresLogin) {
+      // Ask user to login
+      if (confirm('You need to login to add items to cart. Go to login page?')) {
+        router.push(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      }
+      return;
+    }
+    
+    if (result.success) {
+      alert(result.message);
+    } else {
+      alert('Failed to add to cart. Please try again.');
+    }
   };
 
   // Check if product has valid ID
@@ -92,18 +109,38 @@ export default function ProductCard({ product }) {
           </p>
         </div>
         
-        {/* Stock Status and Add to Cart - Always at bottom */}
+        {/* Stock Status and Add to Cart */}
         <div className="flex items-center justify-between mt-auto pt-3 border-t border-gray-100">
           <span className={`text-sm font-medium ${product.inStock ? 'text-green-600' : 'text-red-600'}`}>
             {product.inStock ? 'In Stock' : 'Out of Stock'}
           </span>
-          <button 
-            onClick={handleAddToCart}
-            className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium whitespace-nowrap"
-            disabled={!product.inStock}
-          >
-            Add to Cart
-          </button>
+          
+          {loading ? (
+            <button 
+              className="bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap cursor-not-allowed"
+              disabled
+            >
+              Loading...
+            </button>
+          ) : !user ? (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push('/auth/login');
+              }}
+              className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
+            >
+              Login to Buy
+            </button>
+          ) : (
+            <button 
+              onClick={handleAddToCart}
+              className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium whitespace-nowrap"
+              disabled={!product.inStock}
+            >
+              Add to Cart
+            </button>
+          )}
         </div>
       </div>
     </div>
